@@ -1,17 +1,15 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct Queue Queue;
-
-struct Queue
+typedef struct Queue
 {
     uint8_t len;
     uint8_t r_ptr;
     uint8_t w_ptr;
     uint8_t buf[16];
-};
+} Queue_t;
 
-__device__ int queue_read(struct Queue *q, uint8_t *n)
+__device__ int queue_read(Queue_t *q, uint8_t *n)
 {
     if (q->len == 0)
     {
@@ -26,7 +24,7 @@ __device__ int queue_read(struct Queue *q, uint8_t *n)
     return 0;
 }
 
-__device__ int queue_write(struct Queue *q, uint8_t n)
+__device__ int queue_write(Queue_t *q, uint8_t n)
 {
     if (q->len == 16)
     {
