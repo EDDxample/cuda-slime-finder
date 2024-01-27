@@ -1,8 +1,5 @@
-#include <inttypes.h>
-#include "stdbool.h"
-
-typedef int32_t i32;
-typedef uint64_t u64;
+#include <stdbool.h>
+#include "ints.h"
 
 ///=============================================================================
 ///                    C implementation of Java Random

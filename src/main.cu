@@ -1,34 +1,34 @@
-#include <inttypes.h>
 #include <stdio.h>
 #include "rng.cuh"
+#include "ints.h"
 
-__device__ int16_t compute_column(uint64_t seed, int32_t xdx, int32_t z)
+__device__ i16 compute_column(u64 seed, i32 xdx, i32 z)
 {
-    int16_t sum = 0;
-    for (int32_t dz = -8; dz < 8; ++dz)
+    i16 sum = 0;
+    for (i32 dz = -8; dz < 8; ++dz)
     {
         sum += is_slime(seed, xdx, z + dz);
     }
     return sum;
 }
 
-__device__ int16_t compute_center(uint64_t seed, int32_t x, int32_t z)
+__device__ i16 compute_center(u64 seed, i32 x, i32 z)
 {
-    int16_t sum = 0;
-    for (int32_t dx = -8; dx < 8; ++dx)
+    i16 sum = 0;
+    for (i32 dx = -8; dx < 8; ++dx)
     {
         sum += compute_column(seed, x + dx, z);
     }
     return sum;
 }
 
-__device__ void iter_row(uint64_t seed, int32_t thread_id, int32_t z, int16_t *out_values, int32_t *out_x)
+__device__ void iter_row(u64 seed, i32 thread_id, i32 z, i16 *out_values, i32 *out_x)
 {
-    int best = 0;
-    int best_x = 0;
+    i16 best = 0;
+    i32 best_x = 0;
 
-    int slime_count = -1;
-    for (int x = -1875000; x < 1875000; ++x)
+    i16 slime_count = -1;
+    for (i32 x = -1875000; x < 1875000; ++x)
     {
         if (slime_count == -1)
         {
@@ -48,18 +48,18 @@ __device__ void iter_row(uint64_t seed, int32_t thread_id, int32_t z, int16_t *o
     out_x[thread_id] = best_x;
 }
 
-__host__ void print_best_chunk(int16_t *out_values, int32_t *out_x, int32_t thread_count)
+__host__ void print_best_chunk(i16 *out_values, i32 *out_x, i32 thread_count)
 {
     printf("\nComputing best row...\n");
-    int16_t best = 0;
-    int32_t best_x = 0;
-    int32_t best_z = 0;
+    i16 best = 0;
+    i32 best_x = 0;
+    i32 best_z = 0;
 
-    for (int thread_id = 0; thread_id < thread_count; ++thread_id)
+    for (i32 thread_id = 0; thread_id < thread_count; ++thread_id)
     {
-        int value = out_values[thread_id];
-        int x = out_x[thread_id];
-        int z = thread_id - thread_count / 2;
+        i32 value = out_values[thread_id];
+        i32 x = out_x[thread_id];
+        i32 z = thread_id - thread_count / 2;
 
         if (value > best || (value == best && abs(x + z) < abs(best_x + best_z)))
         {
@@ -73,34 +73,34 @@ __host__ void print_best_chunk(int16_t *out_values, int32_t *out_x, int32_t thre
     printf("Result: %d (%d, %d) (%d, %d)\n", best, best_x, best_z, best_x * 16 + 8, best_z * 16 + 8);
 }
 
-__global__ void slime_finder_kernel(uint64_t seed, int16_t *out_d, int32_t *outx_d)
+__global__ void slime_finder_kernel(u64 seed, i16 *out_d, i32 *outx_d)
 {
-    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
-    int thread_count = blockDim.x * gridDim.x;
-    int z = thread_id - thread_count / 2;
+    i32 thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    i32 thread_count = blockDim.x * gridDim.x;
+    i32 z = thread_id - thread_count / 2;
 
     iter_row(seed, thread_id, z, out_d, outx_d);
 }
 
-int main(int argc, char const *argv[])
+int main()
 {
-    uint64_t seed = 8354031675596398786ULL;
+    u64 seed = 8354031675596398786ULL;
 
     // kernel parameters (GPU based)
-    int blocks_per_grid = 32 * 2;
-    int threads_per_block = 1024;
-    int thread_count = blocks_per_grid * threads_per_block;
+    i32 blocks_per_grid = 32 * 2;
+    i32 threads_per_block = 1024;
+    i32 thread_count = blocks_per_grid * threads_per_block;
 
-    int out_len = sizeof(int16_t) * thread_count;
-    int outx_len = sizeof(int32_t) * thread_count;
+    i32 out_len = sizeof(i16) * thread_count;
+    i32 outx_len = sizeof(i32) * thread_count;
 
     // create host output arrays
-    int16_t *out_h = (int16_t *)malloc(out_len);
-    int32_t *outx_h = (int32_t *)malloc(outx_len);
+    i16 *out_h = (i16 *)malloc(out_len);
+    i32 *outx_h = (i32 *)malloc(outx_len);
 
     // create device output arrays
-    int16_t *out_d;
-    int32_t *outx_d;
+    i16 *out_d;
+    i32 *outx_d;
     cudaMalloc((void **)&out_d, out_len);
     cudaMalloc((void **)&outx_d, outx_len);
 
