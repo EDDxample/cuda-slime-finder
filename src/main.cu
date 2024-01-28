@@ -1,6 +1,9 @@
 #include <stdio.h>
-#include "rng.cuh"
 #include "ints.h"
+#include "queue.cuh"
+#include "rng.cuh"
+
+#define CHUNK_WORLD_BORDER 30000000 / 16 - 8
 
 __device__ i16 compute_column(u64 seed, i32 xdx, i32 z)
 {
@@ -12,31 +15,34 @@ __device__ i16 compute_column(u64 seed, i32 xdx, i32 z)
     return sum;
 }
 
-__device__ i16 compute_center(u64 seed, i32 x, i32 z)
-{
-    i16 sum = 0;
-    for (i32 dx = -8; dx < 8; ++dx)
-    {
-        sum += compute_column(seed, x + dx, z);
-    }
-    return sum;
-}
-
 __device__ void iter_row(u64 seed, i32 thread_id, i32 z, i16 *out_values, i32 *out_x)
 {
     i16 best = 0;
     i32 best_x = 0;
 
     i16 slime_count = -1;
-    for (i32 x = -1875000; x < 1875000; ++x)
+    Queue_t queue = {0, 0, 0, {0}};
+
+    for (i32 x = -CHUNK_WORLD_BORDER; x < CHUNK_WORLD_BORDER; ++x)
     {
         if (slime_count == -1)
         {
-            slime_count = compute_center(seed, x, z);
+            slime_count = 0;
+            for (i32 dx = -8; dx < 8; ++dx)
+            {
+                i16 column = compute_column(seed, x + dx, z);
+                slime_count += column;
+                queue_write(&queue, column);
+            }
             continue;
         }
-        slime_count -= compute_column(seed, x - 9, z);
-        slime_count += compute_column(seed, x + 7, z);
+
+        slime_count -= queue_read(&queue);
+
+        i16 new_column = compute_column(seed, x + 7, z);
+        slime_count += new_column;
+        queue_write(&queue, new_column);
+
         if (slime_count > best)
         {
             best = slime_count;
@@ -61,6 +67,7 @@ __host__ void print_best_chunk(i16 *out_values, i32 *out_x, i32 thread_count)
         i32 x = out_x[thread_id];
         i32 z = thread_id - thread_count / 2;
 
+        // get the closest point with the highest value
         if (value > best || (value == best && abs(x + z) < abs(best_x + best_z)))
         {
             best = value;
@@ -73,13 +80,13 @@ __host__ void print_best_chunk(i16 *out_values, i32 *out_x, i32 thread_count)
     printf("Result: %d (%d, %d) (%d, %d)\n", best, best_x, best_z, best_x * 16 + 8, best_z * 16 + 8);
 }
 
-__global__ void slime_finder_kernel(u64 seed, i16 *out_d, i32 *outx_d)
+__global__ void slime_finder_kernel(u64 seed, i16 *out_values, i32 *out_x)
 {
     i32 thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     i32 thread_count = blockDim.x * gridDim.x;
     i32 z = thread_id - thread_count / 2;
 
-    iter_row(seed, thread_id, z, out_d, outx_d);
+    iter_row(seed, thread_id, z, out_values, out_x);
 }
 
 int main()
@@ -91,32 +98,32 @@ int main()
     i32 threads_per_block = 1024;
     i32 thread_count = blocks_per_grid * threads_per_block;
 
-    i32 out_len = sizeof(i16) * thread_count;
-    i32 outx_len = sizeof(i32) * thread_count;
+    i32 out_values_len = sizeof(i16) * thread_count;
+    i32 out_x_len = sizeof(i32) * thread_count;
 
     // create host output arrays
-    i16 *out_h = (i16 *)malloc(out_len);
-    i32 *outx_h = (i32 *)malloc(outx_len);
+    i16 *host_values = (i16 *)malloc(out_values_len);
+    i32 *host_x = (i32 *)malloc(out_x_len);
 
     // create device output arrays
-    i16 *out_d;
-    i32 *outx_d;
-    cudaMalloc((void **)&out_d, out_len);
-    cudaMalloc((void **)&outx_d, outx_len);
+    i16 *device_values;
+    i32 *device_x;
+    cudaMalloc((void **)&device_values, out_values_len);
+    cudaMalloc((void **)&device_x, out_x_len);
 
     // launch kernel
-    slime_finder_kernel<<<blocks_per_grid, threads_per_block>>>(seed, out_d, outx_d);
+    slime_finder_kernel<<<blocks_per_grid, threads_per_block>>>(seed, device_values, device_x);
 
     // copy the result back to the host
-    cudaMemcpy(out_h, out_d, out_len, cudaMemcpyDeviceToHost);
-    cudaMemcpy(outx_h, outx_d, outx_len, cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_values, device_values, out_values_len, cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_x, device_x, out_x_len, cudaMemcpyDeviceToHost);
 
-    print_best_chunk(out_h, outx_h, thread_count);
+    print_best_chunk(host_values, host_x, thread_count);
 
     // cleanup
-    cudaFree(out_d);
-    cudaFree(outx_d);
-    free(out_h);
-    free(outx_h);
+    cudaFree(device_values);
+    cudaFree(device_x);
+    free(host_values);
+    free(host_x);
     return 0;
 }
