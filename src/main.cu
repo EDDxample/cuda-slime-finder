@@ -74,11 +74,11 @@ __host__ void print_best_chunk(int16_t *out_values, int32_t *out_x, int32_t thre
             best = value;
             best_x = x;
             best_z = z;
-            printf("Intermediate: %d (%d, %d)\n", best, best_x, best_z);
+            printf("New best: %d (%d, %d)\n", best, best_x, best_z);
         }
     }
 
-    printf("Result: %d (%d, %d) (%d, %d)\n", best, best_x, best_z, best_x * 16 + 8, best_z * 16 + 8);
+    printf("\nBest: %d (%d, %d) (%d, %d)\n", best, best_x, best_z, best_x * 16 + 8, best_z * 16 + 8);
 }
 
 __global__ void slime_finder_kernel(uint64_t seed, int16_t *out_values, int32_t *out_x)
@@ -95,9 +95,17 @@ int main()
     uint64_t seed = 8354031675596398786ULL;
 
     // kernel parameters (GPU based)
-    int32_t blocks_per_grid = 32 * 2;
-    int32_t threads_per_block = 1024;
+    int32_t blocks_per_grid = 32 * 8;
+    int32_t threads_per_block = 512;
     int32_t thread_count = blocks_per_grid * threads_per_block;
+
+    printf(
+        "\nAnalyzing %lld chunks... (from chunks %d,%d to %d,%d)\n",
+        (int64_t)(thread_count) * (int64_t)(CHUNK_WORLD_BORDER) * 2,
+        -CHUNK_WORLD_BORDER,
+        -thread_count / 2,
+        CHUNK_WORLD_BORDER,
+        thread_count / 2);
 
     int32_t out_values_len = sizeof(int16_t) * thread_count;
     int32_t out_x_len = sizeof(int32_t) * thread_count;
@@ -115,11 +123,19 @@ int main()
     // launch kernel
     slime_finder_kernel<<<blocks_per_grid, threads_per_block>>>(seed, device_values, device_x);
 
-    // copy the result back to the host
-    cudaMemcpy(host_values, device_values, out_values_len, cudaMemcpyDeviceToHost);
-    cudaMemcpy(host_x, device_x, out_x_len, cudaMemcpyDeviceToHost);
+    cudaError_t err = cudaPeekAtLastError();
+    if (err != NULL)
+    {
+        printf("\nCuda Error: %s.\n", cudaGetErrorString(err));
+    }
+    else
+    {
+        // copy the result back to the host
+        cudaMemcpy(host_values, device_values, out_values_len, cudaMemcpyDeviceToHost);
+        cudaMemcpy(host_x, device_x, out_x_len, cudaMemcpyDeviceToHost);
 
-    print_best_chunk(host_values, host_x, thread_count);
+        print_best_chunk(host_values, host_x, thread_count);
+    }
 
     // cleanup
     cudaFree(device_values);

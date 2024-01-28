@@ -1,10 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-///=============================================================================
-///                    C implementation of Java Random
-///=============================================================================
-
 __device__ static inline void set_seed(uint64_t *seed, const uint64_t value)
 {
     *seed = (value ^ 0x5deece66dULL) & ((1ULL << 48) - 1);
