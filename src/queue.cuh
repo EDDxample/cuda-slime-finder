@@ -1,35 +1,34 @@
-#include <stdio.h>
-#include "ints.h"
+#include <stdint.h>
 
 typedef struct Queue
 {
-    u8 len;
-    u8 r_ptr;
-    u8 w_ptr;
-    i16 buf[16];
+    uint8_t len;
+    uint8_t r_ptr;
+    uint8_t w_ptr;
+    int16_t buf[16];
 } Queue_t;
 
-__device__ i16 queue_read(Queue_t *q)
+__device__ int16_t queue_read(Queue_t *q)
 {
     if (q->len == 0)
     {
         printf("Fatal: the deque is empty!\n");
-        exit(1);
+        asm("exit;");
     }
 
-    i16 n = q->buf[q->r_ptr];
+    int16_t n = q->buf[q->r_ptr];
     q->r_ptr = (q->r_ptr + 1) % 16;
     --q->len;
 
     return n;
 }
 
-__device__ void queue_write(Queue_t *q, i16 n)
+__device__ void queue_write(Queue_t *q, int16_t n)
 {
     if (q->len == 16)
     {
         printf("Fatal: deque overflow!\n");
-        exit(1);
+        asm("exit;");
     }
 
     q->buf[q->w_ptr] = n;
