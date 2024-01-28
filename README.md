@@ -1,6 +1,8 @@
 # Slime Finder
 A Slime Chunk finder implementation in CUDA to find the 16x16 area with the most slime chunks around.
 
+![banner](assets/banner.png)
+
 ## Commands
 ```sh
 # compile
