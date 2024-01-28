@@ -95,7 +95,7 @@ int main()
     uint64_t seed = 8354031675596398786ULL;
 
     // kernel parameters (GPU based)
-    int32_t blocks_per_grid = 32 * 8;
+    int32_t blocks_per_grid = 32 * 32;
     int32_t threads_per_block = 512;
     int32_t thread_count = blocks_per_grid * threads_per_block;
 
