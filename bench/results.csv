@@ -4,3 +4,4 @@ timestamp,label,note,x_count,z_count,kernel_ms,rate
 2026-07-10T00:00:00,v3 ring32,power-of-two ring buffer (modulo becomes AND),1048576,65536,728.060,9.439e10
 2026-07-10T00:00:00,v3 phase-split,row loop split into warmup/first/steady phases; %10 via multiply-rotate,1048576,65536,652.000,1.054e11
 2026-07-10T10:32:53,v3 reg-ballot,new-row ballot word kept in register; full-width tile specialization,1048576,65536,572.917,1.199e+11
+2026-07-10T11:26:20,v3 packed-key,track best window as a single packed max instead of a branch (score<<17|row<<4|k),1048576,65536,532.308,1.291e+11

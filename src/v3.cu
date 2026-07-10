@@ -108,13 +108,11 @@ __device__ __forceinline__ void v3_row(
     int32_t r,
     int32_t lane,
     int32_t warp,
-    int32_t out_x_base,
-    int32_t out_z_base,
     const uint64_t (&xt)[CPT],
     const bool (&active)[CPT],
     const bool (&out_active)[CPT],
     int32_t (&vert)[CPT],
-    BestResult &best)
+    uint32_t &best_key)
 {
     constexpr int WORDS = TPB * CPT / 32;
     constexpr int STRIDE = WORDS + 1;
@@ -161,11 +159,13 @@ __device__ __forceinline__ void v3_row(
             }
             vert[k] = v;
 
-            if (EMIT && v > best.score)
+            if (EMIT)
             {
-                best.score = v;
-                best.x = out_x_base + (warp << 5) + lane + k * TPB;
-                best.z = out_z_base + (r - 15);
+                // Score (<= 256), row (< 8192) and k (< 16) pack into one
+                // 32-bit key with the score in the high bits, so tracking the
+                // best window AND its location is a single unsigned max - no
+                // branch, no divergence. Decoded once per tile in cold code.
+                best_key = max(best_key, ((uint32_t)v << 17) | ((uint32_t)r << 4) | (uint32_t)k);
             }
         }
     }
@@ -236,8 +236,7 @@ __global__ void __launch_bounds__(TPB) v3_kernel(
         // final reads.
         __syncthreads();
 
-        const int32_t out_x_base = x0 + x_base;
-        const int32_t out_z_base = z0 + z_base;
+        uint32_t best_key = 0;
 
         // in_h = out_h + 15 >= 16, so the phase structure below is always
         // valid: 15 warmup rows, one output row without the 16-back subtract,
@@ -248,14 +247,14 @@ __global__ void __launch_bounds__(TPB) v3_kernel(
             for (int32_t r = 0; r < 15; ++r)
             {
                 v3_row<TPB, CPT, false, false, true>(rows, z_terms, z_base, r, lane, warp,
-                                                     out_x_base, out_z_base, xt, active, out_active, vert, best);
+                                                     xt, active, out_active, vert, best_key);
             }
             v3_row<TPB, CPT, false, true, true>(rows, z_terms, z_base, 15, lane, warp,
-                                                out_x_base, out_z_base, xt, active, out_active, vert, best);
+                                                xt, active, out_active, vert, best_key);
             for (int32_t r = 16; r < in_h; ++r)
             {
                 v3_row<TPB, CPT, true, true, true>(rows, z_terms, z_base, r, lane, warp,
-                                                   out_x_base, out_z_base, xt, active, out_active, vert, best);
+                                                   xt, active, out_active, vert, best_key);
             }
         }
         else
@@ -263,14 +262,31 @@ __global__ void __launch_bounds__(TPB) v3_kernel(
             for (int32_t r = 0; r < 15; ++r)
             {
                 v3_row<TPB, CPT, false, false, false>(rows, z_terms, z_base, r, lane, warp,
-                                                      out_x_base, out_z_base, xt, active, out_active, vert, best);
+                                                      xt, active, out_active, vert, best_key);
             }
             v3_row<TPB, CPT, false, true, false>(rows, z_terms, z_base, 15, lane, warp,
-                                                 out_x_base, out_z_base, xt, active, out_active, vert, best);
+                                                 xt, active, out_active, vert, best_key);
             for (int32_t r = 16; r < in_h; ++r)
             {
                 v3_row<TPB, CPT, true, true, false>(rows, z_terms, z_base, r, lane, warp,
-                                                    out_x_base, out_z_base, xt, active, out_active, vert, best);
+                                                    xt, active, out_active, vert, best_key);
+            }
+        }
+
+        // Threads whose columns produced no output never raise their key
+        // above 0 (every real output row has r >= 15, so its key >= 15 << 4).
+        if (best_key != 0)
+        {
+            const int32_t k_dec = (int32_t)(best_key & 0xFu);
+            const int32_t r_dec = (int32_t)((best_key >> 4) & 0x1FFFu);
+            const BestResult cand = {
+                (int32_t)(best_key >> 17),
+                x0 + x_base + tx + k_dec * TPB,
+                z0 + z_base + (r_dec - 15),
+            };
+            if (result_better(cand, best))
+            {
+                best = cand;
             }
         }
     }
@@ -379,7 +395,7 @@ static constexpr int32_t MAX_BLOCKS = 8192;
 // Default variant; picked by --tune measurements on the RTX 3060.
 static BestResult run_default(const ScanRegion &r, const DeviceTables &t, float *kernel_ms)
 {
-    return run_variant<128, 8>(r, t, kernel_ms);
+    return run_variant<256, 8>(r, t, kernel_ms);
 }
 
 // ---------------------------------------------------------------------------
