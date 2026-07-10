@@ -90,7 +90,7 @@ def make_plot() -> None:
     muted, grid, baseline, series = "#898781", "#e1e0d9", "#c3c2b7", "#2a78d6"
 
     fig, ax = plt.subplots(figsize=(9, 5), dpi=150)
-    fig.patch.set_facecolor(surface)
+    fig.patch.set_facecolor(surface)  # type: ignore
     ax.set_facecolor(surface)
 
     ax.plot(xs, rates, color=series, linewidth=2, marker="o", markersize=7, zorder=3)
@@ -136,7 +136,7 @@ def make_plot() -> None:
     ax.spines["bottom"].set_color(baseline)
 
     fig.tight_layout()
-    fig.savefig(PLOT, facecolor=surface)
+    fig.savefig(PLOT, facecolor=surface)  # type: ignore
     print(f"wrote {PLOT}")
 
 
