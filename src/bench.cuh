@@ -62,6 +62,7 @@ static inline void print_stats(uint64_t windows, float kernel_ms)
 {
     printf("STATS windows=%llu kernel_ms=%.3f rate=%.3e\n",
            (unsigned long long)windows, kernel_ms, (double)windows / ((double)kernel_ms * 1e-3));
+    printf("Duration: %.3f s\n", (double)kernel_ms * 1e-3);
 }
 
 struct BestResult
